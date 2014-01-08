@@ -22,26 +22,35 @@ Facter.add(:ec2_tag_group) do
       ENV['AWS_ACCESS_KEY'] = Facter.value('aws_access_key')
       ENV['AWS_SECRET_KEY'] = Facter.value('aws_secret_access_key')
     
-      # Fina all instances that have the matching value for the request tag key
-      instances = `ec2-describe-tags --filter "resource-type=instance" --filter "key=#{Facter.value('ec2_tag_group_key')}" --filter "value=#{Facter.value('ec2_tag_group_value')}" | cut -f3`.split("\n")
-      # Get instance details for all matching instances that are running
-      details = `ec2-describe-instances --filter "instance-state-name=running" #{instances.join(' ')}`.split("\n")
-    
+      regions = Facter.value('ec2_tag_regions').to_s()
+      if regions == ""
+        regions = "us-east-1"
+      end
+      
       tag_group = {}
-      details.each{|info|
-        parts = info.split("\t")
-        if parts[0] == "RESERVATION"
-        elsif parts[0] == "INSTANCE"
-          tag_group[parts[1]] = {} unless tag_group.has_key?(parts[1])
-          tag_group[parts[1]]['region'] = parts[11]
-          tag_group[parts[1]]['public-address'] = parts[16]
-          tag_group[parts[1]]['private-address'] = parts[17]
-        elsif parts[0] == "TAG"
-          tag_group[parts[2]] = {} unless tag_group.has_key?(parts[2])
-          tag_group[parts[2]]['tags'] = {} unless tag_group[parts[2]].has_key?('tags')
-          tag_group[parts[2]]['tags'][parts[3]] = parts[4]
-        elsif parts[0] == "BLOCKDEVICE"
-        end
+      regions.split(",").each{
+        |region|
+        
+        # Fina all instances that have the matching value for the request tag key
+        instances = `ec2-describe-tags --region #{region} --filter "resource-type=instance" --filter "key=#{Facter.value('ec2_tag_group_key')}" --filter "value=#{Facter.value('ec2_tag_group_value')}" | cut -f3`.split("\n")
+        # Get instance details for all matching instances that are running
+        details = `ec2-describe-instances --region #{region} --filter "instance-state-name=running" #{instances.join(' ')}`.split("\n")
+
+        details.each{|info|
+          parts = info.split("\t")
+          if parts[0] == "RESERVATION"
+          elsif parts[0] == "INSTANCE"
+            tag_group[parts[1]] = {} unless tag_group.has_key?(parts[1])
+            tag_group[parts[1]]['region'] = parts[11]
+            tag_group[parts[1]]['public-address'] = parts[16]
+            tag_group[parts[1]]['private-address'] = parts[17]
+          elsif parts[0] == "TAG"
+            tag_group[parts[2]] = {} unless tag_group.has_key?(parts[2])
+            tag_group[parts[2]]['tags'] = {} unless tag_group[parts[2]].has_key?('tags')
+            tag_group[parts[2]]['tags'][parts[3]] = parts[4]
+          elsif parts[0] == "BLOCKDEVICE"
+          end
+        }
       }
       
       if tag_group.keys().size() == 0
