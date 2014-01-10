@@ -40,7 +40,7 @@ module Puppet::Parser::Functions
       end
       
       # If this host is in the local region, use its private address
-      if azre.match(details['region']) != nil
+      if azre.match(details['az']) != nil
         ip = details['private-address']
       else
         ip = details['public-address']
