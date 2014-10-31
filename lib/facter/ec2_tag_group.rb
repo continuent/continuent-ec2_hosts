@@ -17,8 +17,14 @@ Facter.add(:ec2_tag_group) do
     fact = ""
     if Facter.value('ec2_tag_group_key').to_s() != ""
       begin
+  require 'rubygems'
+  gem 'aws-sdk'
+rescue LoadError
+end
+
+      begin
         require 'aws/ec2'
-      rescue LoadError
+      rescue LoadError => e
         raise "The aws-sdk Ruby gem or rubygem-aws-sdk package is required for this class"
       end
       
@@ -39,27 +45,34 @@ Facter.add(:ec2_tag_group) do
           region_results[index] = {}
           Puppet.debug("Collect ec2_hosts from #{region}")
           
-          region_ec2 = AWS::EC2.new(:region => region)
-          region_ec2.instances().tagged(Facter.value('ec2_tag_group_key')).tagged_values(Facter.value('ec2_tag_group_value')).each{
-            |ins|
-            unless ins.status == :running
-              next
-            end
-            
-            tags = ins.tags.to_h()
-            unless tags[Facter.value('ec2_tag_group_key')] == Facter.value('ec2_tag_group_value')
-              next
-            end
-            
-            Puppet.debug("Found #{ins.id}")
-            region_results[index][ins.id] = {
-              'region' => region,
-              'az' => ins.availability_zone,
-              'public-address' => ins.public_ip_address,
-              'private-address' => ins.private_ip_address,
-              'tags' => tags,
+          begin
+            region_ec2 = AWS::EC2.new(:region => region)
+            region_ec2.instances().tagged(Facter.value('ec2_tag_group_key')).tagged_values(Facter.value('ec2_tag_group_value')).each{
+              |ins|
+              unless ins.status == :running
+                next
+              end
+              
+              tags = ins.tags.to_h()
+              unless tags[Facter.value('ec2_tag_group_key')] == Facter.value('ec2_tag_group_value')
+                next
+              end
+              
+              Puppet.debug("Found #{ins.id}")
+              region_results[index][ins.id] = {
+                'region' => region,
+                'az' => ins.availability_zone,
+                'public-address' => ins.public_ip_address,
+                'private-address' => ins.private_ip_address,
+                'tags' => tags,
+              }
             }
-          }
+          rescue AWS::EC2::Errors::AuthFailure => af
+            Puppet.debug("Unable to find instances in #{region}: #{af.message}. Operation will continue.")
+          rescue => e
+            Puppet.debug("Error finding instances in #{region}: #{e.message}")
+            raise e
+          end
         }
       }
 
